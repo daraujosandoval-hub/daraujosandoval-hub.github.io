@@ -1,0 +1,181 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Diseño de mezclas – Método ACI</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/css/bootstrap.min.css">
+<style>
+ body{padding-bottom:40px} h4{margin-top:20px;border-bottom:2px solid #337ab7;padding-bottom:4px}
+ td input{min-width:80px} .table>tbody>tr>td{vertical-align:middle} .res td:nth-child(2){font-weight:bold;text-align:right}
+ .res th{background:#f5f5f5}
+</style>
+</head>
+<body>
+<div class="container">
+ <div class="page-header"><h3>Diseño de mezclas – Método ACI <small>(NTP 400.012 / 400.037 / 339.046)</small></h3></div>
+ <ul class="nav nav-tabs">
+  <li class="active"><a data-toggle="tab" href="#t1">1. Granulometría</a></li>
+  <li><a data-toggle="tab" href="#t2">2. Ensayos</a></li>
+  <li><a data-toggle="tab" href="#t3">3. Diseño ACI</a></li>
+ </ul>
+ <div class="tab-content">
+  <div class="tab-pane active" id="t1"><div class="row"><div class="col-md-6" id="gF"></div><div class="col-md-6" id="gG"></div></div></div>
+  <div class="tab-pane" id="t2"><div id="ens"></div></div>
+  <div class="tab-pane" id="t3">
+   <div class="row">
+    <div class="col-md-4" id="form"></div>
+    <div class="col-md-8" id="out"></div>
+   </div>
+  </div>
+ </div>
+</div>
+<script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/2.9.4/Chart.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/bootstrap@3.4.1/dist/js/bootstrap.min.js"></script>
+<script>
+/* ---------- utilidades ---------- */
+var S={}, F=function(id){return parseFloat($('#'+id).val())},
+ R=function(x,n){var k=Math.pow(10,n);return Math.round(x*k)/k},
+ T=function(x,n){return isFinite(x)?R(x,n).toFixed(n):'–'},
+ I=function(id,v){return '<input type="number" step="any" class="form-control input-sm" id="'+id+'" value="'+(v==null?'':v)+'">'},
+ lin=function(x,xs,ys){if(x<=xs[0])return ys[0];for(var i=1;i<xs.length;i++)if(x<=xs[i])return ys[i-1]+(x-xs[i-1])*(ys[i]-ys[i-1])/(xs[i]-xs[i-1]);return ys[ys.length-1]};
+
+/* ---------- 1. Granulometría ---------- */
+var G={
+ F:{n:'Agregado fino (límites ASTM C33 / NTP 400.037)',b:10.7,mf:[0,1,2,3,4,5,6],v:[0,10.8,29.7,67.5,57.4,66.1,33.9,23.6],
+  s:[['3/8"',9.5,100,100],['No. 4',4.75,95,100],['No. 8',2.36,80,100],['No. 16',1.18,50,85],['No. 30',.6,25,60],['No. 50',.3,5,30],['No. 100',.15,0,10],['No. 200',.075,0,3]]},
+ G:{n:'Agregado grueso',b:9.7,mf:[1,3,5,6,7,8,9,10,11],v:['','',0,370.3,898.9,351.1,370.5,'','','','','',''],
+  s:[['2"',50],['1 1/2"',37.5],['1"',25],['3/4"',19],['1/2"',12.5],['3/8"',9.5],['No. 4',4.75],['No. 8',2.36],['No. 16',1.18],['No. 30',.6],['No. 50',.3],['No. 100',.15],['No. 200',.075]]}};
+function gHtml(k){var g=G[k],lim=g.s[0].length>2,
+ h='<h4>'+g.n+'</h4><table class="table table-condensed table-bordered"><tr><th>Tamiz</th><th>Peso ret. (g)</th><th>% Ret.</th><th>% Ret. ac.</th><th>% Pasa</th>'+(lim?'<th>Mín</th><th>Máx</th>':'')+'</tr>';
+ g.s.forEach(function(s,i){h+='<tr><td>'+s[0]+'</td><td>'+I('g'+k+i,g.v[i])+'</td><td id="r'+k+i+'"></td><td id="a'+k+i+'"></td><td id="p'+k+i+'"></td>'+(lim?'<td>'+s[2]+'</td><td>'+s[3]+'</td>':'')+'</tr>'});
+ return h+'<tr><td>Bandeja</td><td>'+I('g'+k+'b',g.b)+'</td><td colspan="'+(lim?5:3)+'"></td></tr><tr><th>Total</th><th id="t'+k+'"></th><td colspan="'+(lim?5:3)+'"></td></tr></table>'+
+ '<p>Módulo de fineza: <b id="mf'+k+'">–</b><br>Tamaño máximo: <b id="tm'+k+'">–</b> &nbsp;|&nbsp; Tamaño máximo nominal: <b id="tn'+k+'">–</b></p><canvas id="c'+k+'" height="260"></canvas>';
+}
+function calcG(k){
+ var g=G[k],w=g.s.map(function(s,i){return F('g'+k+i)||0}),b=F('g'+k+'b')||0,t=w.reduce(function(x,y){return x+y},b),ac=0,A=[],tm='–',tn='–';
+ $('#t'+k).text(T(t,1));
+ g.s.forEach(function(s,i){var r=t?w[i]/t*100:0;ac+=r;A[i]=ac;var p=100-ac;
+  $('#r'+k+i).text(T(r,2));$('#a'+k+i).text(T(ac,2));
+  $('#p'+k+i).text(T(p,2)).parent().toggleClass('danger',s.length>2&&t>0&&(p<s[2]-1e-9||p>s[3]+1e-9));
+  if(t&&R(p,4)==100)tm=s[0]; if(t&&tn=='–'&&ac>1e-9)tn=s[0];});
+ S['mf'+k]=t?R(g.mf.reduce(function(x,i){return x+A[i]},0)/100,3):NaN;
+ $('#mf'+k).text(T(S['mf'+k],3));$('#tm'+k).text(tm);$('#tn'+k).text(tn);
+ drawG(k,g,A,t);
+ if(k=='G'&&tn!=S.tnPrev){S.tnPrev=tn;$('#tmn option').filter(function(){return $(this).text()==tn}).prop('selected',true)}
+}
+
+var CH={};
+function drawG(k,g,A,t){
+ var ds=[{label:'% que pasa',data:g.s.map(function(s,i){return {x:s[1],y:t?R(100-A[i],2):null}}),borderColor:'#337ab7',backgroundColor:'#337ab7',fill:false,lineTension:0,pointRadius:3}];
+ if(g.s[0].length>2){
+  ds.push({label:'Límite inferior',data:g.s.map(function(s){return {x:s[1],y:s[2]}}),borderColor:'#d9534f',borderDash:[6,4],fill:false,lineTension:0,pointRadius:0});
+  ds.push({label:'Límite superior',data:g.s.map(function(s){return {x:s[1],y:s[3]}}),borderColor:'#f0ad4e',borderDash:[6,4],fill:false,lineTension:0,pointRadius:0});
+ }
+ if(!CH[k]){
+  CH[k]=new Chart(document.getElementById('c'+k),{type:'line',data:{datasets:ds},options:{animation:false,
+   title:{display:true,text:'Curva granulométrica – '+(k=='F'?'agregado fino':'agregado grueso')},
+   scales:{xAxes:[{type:'logarithmic',scaleLabel:{display:true,labelString:'Abertura (mm)'},ticks:{reverse:true,min:.075,max:g.s[0][1]*1.05,callback:function(v){return +v.toPrecision(2)}}}],
+           yAxes:[{scaleLabel:{display:true,labelString:'% que pasa'},ticks:{min:0,max:100}}]}}});
+ }else{CH[k].data.datasets=ds;CH[k].update()}
+}
+
+/* ---------- 2. Ensayos ---------- */
+function ensHtml(){
+ var h='<h4>Peso unitario (NTP 400.017)</h4><table class="table table-condensed table-bordered"><tr><th></th><th>Fino suelto</th><th>Fino compact.</th><th>Grueso suelto</th><th>Grueso compact.</th></tr>',
+ pu={F:[[7.305,7.545],[2.58,2.58],10],G:[[18.335,19.78],[4.84,4.84],3]};
+ h+='<tr><td>Peso agregado + recipiente (kg)</td>';['F','G'].forEach(function(a){['s','c'].forEach(function(c,j){h+='<td>'+I('pa'+a+c,pu[a][0][j])+'</td>'})});
+ h+='</tr><tr><td>Peso del recipiente (kg)</td>';['F','G'].forEach(function(a){['s','c'].forEach(function(c,j){h+='<td>'+I('pr'+a+c,pu[a][1][j])+'</td>'})});
+ h+='</tr><tr><td>Recipiente = 1/N pie³ → N</td>';['F','G'].forEach(function(a){h+='<td colspan="2">'+I('pn'+a,pu[a][2])+'</td>'});
+ h+='</tr><tr class="info"><td><b>Peso unitario (kg/m³)</b></td>';['F','G'].forEach(function(a){['s','c'].forEach(function(c){h+='<th id="pu'+a+c+'"></th>'})});
+ h+='</tr></table><h4>Contenido de humedad (NTP 339.185)</h4><table class="table table-condensed table-bordered"><tr><th></th><th>Fino</th><th>Grueso</th></tr>',
+ hd=[['Peso húmedo natural + bandeja (g)',623.8,1151.5],['Peso de la bandeja (g)',123.8,151.5],['Peso seco + bandeja (g)',618,1147.8]];
+ hd.forEach(function(r,i){h+='<tr><td>'+r[0]+'</td><td>'+I('h'+i+'F',r[1])+'</td><td>'+I('h'+i+'G',r[2])+'</td></tr>'});
+ h+='<tr class="info"><td><b>Humedad h (%)</b></td><th id="hF"></th><th id="hG"></th></tr></table>'+
+ '<h4>Peso específico y absorción (NTP 400.021 / 400.022)</h4><table class="table table-condensed table-bordered"><tr><th></th><th>Fino</th><th>Grueso</th></tr>',
+ pe=[['Peso de la bandeja (g)',259.6,527.7],['Peso agregado SSS + bandeja (g)',759.6,2540.4],['Fino: picnómetro + agua / Grueso: cesta sumergida (g)',647.2,894.1],['Fino: picnómetro + SSS + agua / Grueso: SSS + cesta sumergida (g)',948.7,2186.4],['Peso bandeja de secado (g)',114.6,150.4],['Peso agregado seco + bandeja (g)',601,2136.6]];
+ pe.forEach(function(r,i){h+='<tr><td>'+r[0]+'</td><td>'+I('e'+i+'F',r[1])+'</td><td>'+I('e'+i+'G',r[2])+'</td></tr>'});
+ return h+'<tr class="info"><td><b>Peso específico seco (g/cm³)</b></td><th id="peF"></th><th id="peG"></th></tr><tr class="info"><td><b>Absorción (%)</b></td><th id="abF"></th><th id="abG"></th></tr></table>';
+}
+function calcE(){
+ ['F','G'].forEach(function(a){
+  ['s','c'].forEach(function(c){var v=R(1/F('pn'+a)/35.31,5),p=R((F('pa'+a+c)-F('pr'+a+c))/v,3);S['pu'+a+c]=p;$('#pu'+a+c).text(T(p,1))});
+  var A=F('h0'+a),B=F('h1'+a),C=F('h2'+a),h=R(100*(A-C)/(C-B),2);S['h'+a]=h;$('#h'+a).text(T(h,2));
+  var e=[0,1,2,3,4,5].map(function(i){return F('e'+i+a)}),sss=e[1]-e[0],su=e[3]-e[2],ps=e[5]-e[4];
+  S['pe'+a]=R(ps/(sss-su),3);S['ab'+a]=R(100*(sss-ps)/ps,2);$('#pe'+a).text(T(S['pe'+a],3));$('#ab'+a).text(T(S['ab'+a],2));
+ });
+}
+
+/* ---------- 3. Diseño ACI ---------- */
+var CEM=[['Tipo I',3.15],['Tipo II',3.15],['Tipo III',3.15],['Tipo IV',3.15],['Tipo V',3.15],['Tipo IP',2.95],['Tipo I (PM)',2.95],['Tipo ICo',3],['Tipo MS',3]],
+ ADI=[['Sin aditivo',1,0,0],['Plastificante',1.2,.7,12],['Superplastificante',1.2,1.2,15],['Incorporador de aire',1,0,0],['Acelerante',1,0,0],['Retardante',1,0,0]],
+ EST=[['Zapatas y muros de cimentación reforzados','1" a 3"'],['Cimentaciones simples y calzaduras','1" a 3"'],['Vigas y muros armados','1" a 4"'],['Columnas','2" a 4"'],['Muros y pavimentos','1" a 3"'],['Concreto ciclópeo','1" a 2"']],
+ TMN=['3/8"','1/2"','3/4"','1"','1 1/2"','2"'],
+ ACK=[150,200,250,300,350,400,450],ACS=[.8,.7,.62,.55,.48,.43,.38],ACC=[.71,.61,.53,.46,.4],
+ AGUA=[[[207,199,190,179,166,154],[228,216,205,193,181,169],[243,228,216,202,190,178]],[[181,175,168,160,150,142],[202,193,184,175,165,157],[216,205,197,184,174,166]]],
+ AIRE=[[3,2.5,2,1.5,1,.5],[4.5,4,3.5,3,2.5,2],[6,5.5,5,4.5,4.5,4],[7.5,7,6,6,5.5,5]],
+ VAG=[[.5,.48,.46,.44],[.59,.57,.55,.53],[.66,.64,.62,.6],[.71,.69,.67,.65],[.76,.74,.72,.7],[.78,.76,.74,.72]];
+function opts(a,sel){return a.map(function(x,i){return '<option value="'+i+'"'+(i==sel?' selected':'')+'>'+x[0]+'</option>'}).join('')}
+function fld(l,c){return '<div class="form-group"><label>'+l+'</label>'+c+'</div>'}
+function formHtml(){
+ return '<h4>Datos generales</h4>'+
+ fld('Tipo de cemento','<select id="cem" class="form-control input-sm">'+opts(CEM,0)+'</select>')+
+ fld('Peso específico del cemento (g/cm³)',I('pec',3.15))+
+ fld("Resistencia f'c (kg/cm²)",I('fc',210))+
+ fld('Estructura','<select id="est" class="form-control input-sm">'+opts(EST,0)+'</select><small class="text-muted" id="estS"></small>')+
+ fld('Slump','<select id="slump" class="form-control input-sm"><option value="0">1" a 2" (25–50 mm)</option><option value="1" selected>3" a 4" (75–100 mm)</option><option value="2">6" a 7" (150–175 mm)</option></select>')+
+ fld('Aire incorporado','<select id="aire" class="form-control input-sm"><option value="0">Sin aire incorporado</option><option value="1">Con aire incorporado</option></select>')+
+ fld('Exposición a la intemperie','<select id="expo" class="form-control input-sm"><option value="0">Normal</option><option value="1">Leve</option><option value="2">Moderada (F1)</option><option value="3">Severa (F2 y F3)</option></select>')+
+ fld('Tamaño máx. nominal del agregado grueso','<select id="tmn" class="form-control input-sm">'+TMN.map(function(t,i){return '<option value="'+i+'"'+(i==2?' selected':'')+'>'+t+'</option>'}).join('')+'</select><small class="text-muted">Se actualiza solo desde la granulometría.</small>')+
+ '<h4>Aditivo</h4>'+fld('Tipo','<select id="adi" class="form-control input-sm">'+opts(ADI,1)+'</select>')+
+ fld('Densidad (g/cm³)',I('ad1',1.2))+fld('Dosificación (% peso cemento)',I('ad2',.7))+fld('Reducción de agua (%)',I('ad3',12))+
+ '<h4>Tanda de prueba</h4>'+fld('Volumen de tanda (m³)',I('vt',.03))+fld('Probeta: altura (m)',I('ph',.3))+fld('Probeta: diámetro (m)',I('pd',.15))+fld('N.º de probetas',I('pn',3));
+}
+function sec(t,rows){return '<h4>'+t+'</h4><table class="table table-condensed table-bordered res"><tbody>'+rows.map(function(r){return '<tr><td>'+r[0]+'</td><td>'+r[1]+'</td><td>'+(r[2]||'')+'</td></tr>'}).join('')+'</tbody></table>'}
+function calcD(){
+ var c=CEM[$('#cem').val()],a=+$('#aire').val(),sl=+$('#slump').val(),ti=+$('#tmn').val(),ex=+$('#expo').val(),
+  fc=F('fc'),pec=F('pec'),W=[];
+ $('#estS').text('Slump recomendado: '+EST[$('#est').val()][1]);
+ var need={'peso específico del fino':S.peF,'peso específico del grueso':S.peG,'PU compactado del grueso':S.puGc,'PU suelto del fino':S.puFs,'PU suelto del grueso':S.puGs,'humedad fino':S.hF,'humedad grueso':S.hG,'absorción fino':S.abF,'absorción grueso':S.abG,'módulo de fineza del fino':S.mfF},miss=[];
+ for(var k in need)if(!isFinite(need[k]))miss.push(k);
+ if(!isFinite(fc)||miss.length){$('#out').html('<div class="alert alert-warning">Faltan datos para calcular: '+(isFinite(fc)?'':"f'c, ")+miss.join(', ')+'.</div>');return}
+ var fcr=fc<210?fc+70:fc<=350?fc+84:1.1*fc+98,K=a?ACK.slice(0,5):ACK,V=a?ACC:ACS;
+ if(fcr<150||fcr>K[K.length-1])W.push("f'cr = "+T(fcr,0)+" kg/cm² está fuera de la tabla a/c ("+K[0]+"–"+K[K.length-1]+"); se usó el valor extremo.");
+ var ac=R(lin(fcr,K,V),2),w0=AGUA[a][sl][ti],ad=ADI[$('#adi').val()],dens=F('ad1'),dos=F('ad2'),red=F('ad3')||0,
+  wr=w0*red/100,w=w0-wr,ce=w/ac,bol=ce/42.5,adk=ce*(dos||0)/100,
+  air=a?AIRE[ex?ex:1][ti]:AIRE[0][ti],
+  mf=S.mfF;if(mf<2.4||mf>3)W.push('El módulo de fineza ('+mf+') está fuera de 2.4–3.0; se usó el valor extremo de la tabla.');
+ var fa=R(lin(mf,[2.4,2.6,2.8,3],VAG[ti]),3),ag=fa*S.puGc,
+  vc=ce/(pec*1000),va=air/100,vw=w/1000,vg=ag/(S.peG*1000),vad=dens?adk/(dens*1000):0,vf=1-(vc+va+vw+vg+vad),fi=vf*S.peF*1000,
+  fh=fi*(1+S.hF/100),gh=ag*(1+S.hG/100),
+  wc=w+fi*(S.abF-S.hF)/100+ag*(S.abG-S.hG)/100,
+  L=[R(ce,1),R(fh,1),R(gh,1),R(wc,1)],pb=L.map(function(x){return x/L[0]*42.5}),
+  vt=F('vt'),vp=R(Math.PI*Math.pow(F('pd')/2,2)*F('ph'),5);
+ if(vf<=0)W.push('El volumen de arena resultó ≤ 0: revisa los datos.');
+ var fmt=function(x){return x.toFixed(2)},
+ sf=pb[1]/S.puFs*35.31,sg=pb[2]/S.puGs*35.31,sw=pb[3]/1000*35.31;
+ var h=W.map(function(m){return '<div class="alert alert-warning">'+m+'</div>'}).join('');
+ h+=sec('Parámetros de diseño',[["Resistencia promedio f'cr",T(fcr,0),'kg/cm²'],['Relación a/c de diseño',T(ac,2)],['Agua de mezclado (tabla)',T(w0,0),'L/m³'],['Reducción de agua por aditivo',T(wr,1),'L/m³'],['Agua de mezclado',T(w,1),'L/m³'],['Cemento',T(ce,1)+' ('+T(bol,2)+' bls)','kg/m³'],['Aire',T(air,1),'%'],['Volumen de AG seco compactado (b/bo)',T(fa,3)],['Peso seco del agregado grueso',T(ag,1),'kg/m³'],['Aditivo',T(adk,3),'kg/m³']]);
+ h+=sec('1. Volúmenes absolutos por m³',[['Cemento',T(vc,4),'m³'],['Aire',T(va,4),'m³'],['Agua',T(vw,4),'m³'],['Agregado grueso',T(vg,4),'m³'],['Aditivo',T(vad,5),'m³'],['Agregado fino (por diferencia)',T(vf,4),'m³'],['Peso seco del agregado fino',T(fi,1),'kg/m³']]);
+ h+=sec('2. Corrección por humedad (por m³)',[['Cemento',T(ce,1),'kg'],['Agregado fino húmedo',T(fh,1),'kg'],['Agregado grueso húmedo',T(gh,1),'kg'],['Agua corregida',T(wc,1),'L'],['Relación agua corregida / cemento',T(wc/ce,3)]]);
+ h+=sec('3. Dosificación en peso',[['Proporción en peso (c : a : p : agua)','1 : '+fmt(pb[1]/42.5)+' : '+fmt(pb[2]/42.5)+' : '+fmt(pb[3]/42.5)],['Pesos por bolsa (cemento / arena / piedra / agua)',T(42.5,1)+' / '+T(pb[1],1)+' / '+T(pb[2],1)+' / '+T(pb[3],1),'kg · L'],['Aditivo por bolsa',T(adk/ce*42.5*1000,1),'g']]);
+ h+=sec('4. Dosificación en obra (volumen suelto por bolsa)',[['Proporción en pie³ (c : a : p)','1 : '+fmt(sf)+' : '+fmt(sg)],['Agua por bolsa',T(sw,3)+' pie³ = '+T(pb[3],1)+' L']]);
+ h+=sec('5. Tanda de prueba de '+T(vt,3)+' m³',[['Cemento',T(L[0]*vt,3),'kg'],['Arena húmeda',T(L[1]*vt,3),'kg'],['Piedra húmeda',T(L[2]*vt,3),'kg'],['Agua',T(L[3]*vt,3),'L'],['Aditivo',T(adk*vt*1000,1),'g'],['Volumen de 1 probeta / total',T(vp,5)+' / '+T(vp*F('pn'),4),'m³']]);
+ $('#out').html(h);
+}
+
+/* ---------- inicio ---------- */
+function calcAll(){calcG('F');calcG('G');calcE();calcD()}
+$(function(){
+ $('#gF').html(gHtml('F'));$('#gG').html(gHtml('G'));$('#ens').html(ensHtml());$('#form').html(formHtml());
+ $(document).on('input change','input,select',function(e){
+  if(e.target.id=='cem')$('#pec').val(CEM[$(e.target).val()][1]);
+  if(e.target.id=='adi'){var d=ADI[$(e.target).val()];$('#ad1').val(d[1]);$('#ad2').val(d[2]);$('#ad3').val(d[3])}
+  calcAll();
+ });
+ calcAll();
+});
+</script>
+</body>
+</html>
